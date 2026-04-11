@@ -171,7 +171,15 @@ export class VibeTunnelsProvider implements TunnelProvider {
 
   async issueSession(req: IssueSessionRequest): Promise<TunnelSessionInfo> {
     const hint = extractFrpsHint(req);
-    const tunnelId = crypto.randomUUID();
+    // Key agent-side storage by the backend tunnel id when the control
+    // plane provides one. Without this the agent mints a random UUID and
+    // the backend's subsequent stop/start calls (which use the backend
+    // id) silently miss, leaving frpc processes orphaned.
+    const backendTunnelId =
+      typeof req.metadata?.["backendTunnelId"] === "string"
+        ? (req.metadata["backendTunnelId"] as string)
+        : undefined;
+    const tunnelId = backendTunnelId ?? crypto.randomUUID();
     const sessionId = hint.sessionId ?? crypto.randomUUID();
     const localHost = req.localHost ?? "127.0.0.1";
     const configPath = join(configDir(), `${tunnelId}.toml`);
