@@ -12,6 +12,16 @@ export interface FrpcConfigInput {
   localHost: string;
   localPort: number;
   managedHostname?: string;
+  /**
+   * Pre-computed subdomain prefix (e.g. `testing` for
+   * `testing.vibetunnels.com` when frps `subDomainHost` is
+   * `vibetunnels.com`). When set, the rendered proxy block uses
+   * `subdomain = X` instead of including managedHostname under
+   * `customDomains`. frps rejects custom domains that fall under its
+   * own subdomain host with `custom domain ... should not belong to
+   * subdomain host`.
+   */
+  subdomain?: string;
   customDomains?: string[];
 }
 
@@ -84,8 +94,11 @@ export function buildFrpcConfig(input: FrpcConfigInput): string {
   lines.push(`method = "token"`);
   lines.push(`token = "${input.token}"`);
   lines.push("");
-  lines.push('log.to = "console"');
-  lines.push('log.level = "info"');
+  // frpc (>= 0.64) rejects the inline `log.to` / `log.level` syntax with
+  // `json: unknown field "log"`; the correct TOML is a [log] table.
+  lines.push("[log]");
+  lines.push('to = "console"');
+  lines.push('level = "info"');
   lines.push("");
 
   lines.push("[[proxies]]");
@@ -95,14 +108,27 @@ export function buildFrpcConfig(input: FrpcConfigInput): string {
   lines.push(`localPort = ${input.localPort}`);
 
   if (input.protocol === "http" || input.protocol === "https") {
-    const domains: string[] = [];
-    if (input.managedHostname) domains.push(input.managedHostname);
-    if (input.customDomains && input.customDomains.length > 0) {
-      domains.push(...input.customDomains);
+    // When the backend pre-computed a `subdomain` prefix, emit it as the
+    // frpc `subdomain` field — frps then resolves the public URL via its
+    // own `subDomainHost` config (`<subdomain>.<subDomainHost>`). The
+    // managedHostname must NOT also appear in customDomains in this case.
+    if (input.subdomain) {
+      assertTomlSafe("subdomain", input.subdomain);
+      lines.push(`subdomain = "${input.subdomain}"`);
     }
-    if (domains.length > 0) {
+
+    // customDomains is reserved for user-owned FQDNs that are NOT under
+    // the shard's subDomainHost. The managedHostname is intentionally
+    // skipped here when `subdomain` is set.
+    const userDomains = (input.customDomains ?? []).filter(
+      (d) => d !== input.managedHostname,
+    );
+    if (!input.subdomain && input.managedHostname) {
+      userDomains.unshift(input.managedHostname);
+    }
+    if (userDomains.length > 0) {
       lines.push(
-        `customDomains = [${domains.map((d) => `"${d}"`).join(", ")}]`,
+        `customDomains = [${userDomains.map((d) => `"${d}"`).join(", ")}]`,
       );
     }
   }
@@ -121,6 +147,8 @@ export function extractFrpsHint(req: IssueSessionRequest): {
   token: string;
   proxyName: string;
   managedHostname?: string;
+  subdomain?: string;
+  customDomains?: string[];
   shardId?: string;
   sessionId?: string;
 } {
@@ -152,6 +180,15 @@ export function extractFrpsHint(req: IssueSessionRequest): {
       typeof payload["managedHostname"] === "string"
         ? (payload["managedHostname"] as string)
         : undefined,
+    subdomain:
+      typeof payload["subdomain"] === "string"
+        ? (payload["subdomain"] as string)
+        : undefined,
+    customDomains: Array.isArray(payload["customDomains"])
+      ? (payload["customDomains"] as string[]).filter(
+          (d): d is string => typeof d === "string",
+        )
+      : undefined,
     shardId:
       typeof payload["shardId"] === "string"
         ? (payload["shardId"] as string)

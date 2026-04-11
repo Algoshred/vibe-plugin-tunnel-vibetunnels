@@ -176,8 +176,15 @@ export class VibeTunnelsProvider implements TunnelProvider {
     const localHost = req.localHost ?? "127.0.0.1";
     const configPath = join(configDir(), `${tunnelId}.toml`);
 
+    // Combine the agent-side `customDomain` (passed via the issueSession
+    // request body) with any control-plane custom domains the backend
+    // attached. Deduplicate so a single user-owned hostname doesn't get
+    // emitted twice.
     const customDomains: string[] = [];
     if (req.customDomain) customDomains.push(req.customDomain);
+    for (const d of hint.customDomains ?? []) {
+      if (!customDomains.includes(d)) customDomains.push(d);
+    }
 
     const toml = buildFrpcConfig({
       serverAddr: hint.serverAddr,
@@ -188,6 +195,11 @@ export class VibeTunnelsProvider implements TunnelProvider {
       localHost,
       localPort: req.localPort,
       managedHostname: hint.managedHostname,
+      // When the backend pre-computed a `subdomain` prefix (because the
+      // managed hostname is under the shard's frps subDomainHost), the
+      // generated TOML emits `subdomain = X` instead of including the
+      // managed hostname under `customDomains` — frps rejects the latter.
+      subdomain: hint.subdomain,
       customDomains,
     });
 
