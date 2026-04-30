@@ -144,4 +144,4 @@ export const STORAGE_NS = "tunnel-vibetunnels";
 export const KEY_TUNNELS = "tunnels";
 export const KEY_SESSIONS_PREFIX = "sessions:";
 export const KILL_GRACE_MS = 3_000;
-export const START_TIMEOUT_MS = 30_000;
+export const START_TIMEOUT_MS = 25_000;

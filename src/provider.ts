@@ -70,6 +70,70 @@ function configDir(): string {
   return dir;
 }
 
+async function waitForFrpcStart(proc: Subprocess): Promise<{
+  success: boolean;
+  output: string;
+}> {
+  let output = "";
+  let settled = false;
+  const decoder = new TextDecoder();
+
+  return new Promise((resolve) => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const finish = (success: boolean, suffix = "") => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      resolve({ success, output: `${output}${suffix}` });
+    };
+
+    const inspect = () => {
+      if (/start proxy success/i.test(output)) {
+        finish(true);
+        return;
+      }
+      if (
+        /login to server failed|authentication failed|start error|start proxy error/i.test(
+          output,
+        )
+      ) {
+        finish(false);
+      }
+    };
+
+    const readStream = async (stream: ReadableStream<Uint8Array> | null) => {
+      if (!stream) return;
+      const reader = stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          output += decoder.decode(value, { stream: true });
+          inspect();
+        }
+      } catch (err) {
+        if (!settled) output += `\n${String(err)}`;
+      } finally {
+        reader.releaseLock();
+      }
+    };
+
+    void readStream(proc.stdout as ReadableStream<Uint8Array> | null);
+    void readStream(proc.stderr as ReadableStream<Uint8Array> | null);
+    void proc.exited.then((code) => {
+      finish(false, `\nfrpc exited with code ${code}`);
+    });
+
+    timeoutId = setTimeout(() => {
+      finish(
+        false,
+        `\nTimed out after ${START_TIMEOUT_MS}ms waiting for frpc start success`,
+      );
+    }, START_TIMEOUT_MS);
+  });
+}
+
 export class VibeTunnelsProvider implements TunnelProvider {
   readonly name = PROVIDER_NAME;
 
@@ -282,29 +346,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
     });
     this.processes.set(tunnelId, proc);
 
-    const startedAt = Date.now();
-    let success = false;
-    const reader = (
-      proc.stdout as ReadableStream<Uint8Array> | null
-    )?.getReader();
-    const decoder = new TextDecoder();
-    let accumulated = "";
-    try {
-      while (reader && Date.now() - startedAt < START_TIMEOUT_MS) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        accumulated += decoder.decode(value, { stream: true });
-        if (/start proxy success/i.test(accumulated)) {
-          success = true;
-          break;
-        }
-        if (/login to server failed|authentication failed/i.test(accumulated)) {
-          break;
-        }
-      }
-    } finally {
-      reader?.releaseLock();
-    }
+    const { success, output } = await waitForFrpcStart(proc);
 
     if (!success) {
       this.processes.delete(tunnelId);
@@ -313,12 +355,10 @@ export class VibeTunnelsProvider implements TunnelProvider {
         ...info,
         status: "error",
         updatedAt: new Date().toISOString(),
-        metadata: { ...info.metadata, startError: accumulated.slice(-500) },
+        metadata: { ...info.metadata, startError: output.slice(-500) },
       };
       await this.upsertTunnel(errored);
-      throw new Error(
-        `frpc failed to report success: ${accumulated.slice(-200)}`,
-      );
+      throw new Error(`frpc failed to report success: ${output.slice(-200)}`);
     }
 
     void proc.exited.then(async (code) => {
