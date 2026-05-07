@@ -79,8 +79,6 @@ async function waitForFrpcStart(proc: Subprocess): Promise<{
   const decoder = new TextDecoder();
 
   return new Promise((resolve) => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-
     const finish = (success: boolean, suffix = "") => {
       if (settled) return;
       settled = true;
@@ -125,7 +123,7 @@ async function waitForFrpcStart(proc: Subprocess): Promise<{
       finish(false, `\nfrpc exited with code ${code}`);
     });
 
-    timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       finish(
         false,
         `\nTimed out after ${START_TIMEOUT_MS}ms waiting for frpc start success`,

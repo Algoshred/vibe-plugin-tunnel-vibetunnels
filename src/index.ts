@@ -11,6 +11,11 @@ import { PROVIDER_NAME, type HostServices, type VibePlugin } from "./types.js";
 let provider: VibeTunnelsProvider | null = null;
 
 export const vibePlugin: VibePlugin = {
+  capabilities: {
+    storage: "rw",
+    subprocess: true,
+    telemetry: true,
+  },
   name: PROVIDER_NAME,
   version: "0.1.0",
   description: "VibeTunnels frp-based tunnel provider",
@@ -18,6 +23,7 @@ export const vibePlugin: VibePlugin = {
   providers: {},
 
   async onServerStart(_app: unknown, hostServices: HostServices) {
+    hostServices?.telemetry?.emit("tunnel.provider.ready", { provider: "vibetunnels" });
     provider = new VibeTunnelsProvider(hostServices);
     vibePlugin.providers!.tunnel = provider;
 
