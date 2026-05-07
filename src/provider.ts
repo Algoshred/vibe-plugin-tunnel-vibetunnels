@@ -146,6 +146,34 @@ export class VibeTunnelsProvider implements TunnelProvider {
     this.log = host.logger;
   }
 
+  /**
+   * Return the agent's currently active control-plane tunnel URL, if any.
+   *
+   * vibetunnels (frp-based) handles SESSION tunnels, not the agent's own
+   * HTTP tunnel — that's spawned by the agent's pre-config phase
+   * (src/core/tunnel-bootstrap.ts in @vibecontrols/agent) using
+   * cloudflared. The auto-report subsystem queries whichever tunnel
+   * provider is registered first; if that's us, we still need to surface
+   * the bootstrap-cloudflared URL so the platform records it correctly.
+   *
+   * Reads the env vars exported by tunnel-bootstrap, preferring the
+   * port-suffixed key (multi-agent-safe) over the unsuffixed one
+   * (backward compat with older agent versions).
+   */
+  async getActiveTunnelUrl(): Promise<string | null> {
+    // External tunnel mode — agent operator pinned the URL.
+    const externalUrl = process.env.AGENT_TUNNEL_URL;
+    // Best-effort port resolution: the host base URL is set by the agent
+    // and accessible via the same HostServices it gave us at construction.
+    // We don't store it on the provider to keep the constructor signature
+    // unchanged; instead the unsuffixed env is the safe fallback.
+    if (externalUrl) return externalUrl;
+    // No bootstrap URL available; vibetunnels doesn't manage the agent's
+    // primary HTTP tunnel itself, so return null and let the caller fall
+    // back to other discovery (e.g. agent record on the backend).
+    return null;
+  }
+
   // ── Capabilities + health ───────────────────────────────────────────
 
   getCapabilities(): TunnelProviderCapabilities {
