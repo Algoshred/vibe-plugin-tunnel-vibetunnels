@@ -153,24 +153,36 @@ export class VibeTunnelsProvider implements TunnelProvider {
    * HTTP tunnel — that's spawned by the agent's pre-config phase
    * (src/core/tunnel-bootstrap.ts in @vibecontrols/agent) using
    * cloudflared. The auto-report subsystem queries whichever tunnel
-   * provider is registered first; if that's us, we still need to surface
-   * the bootstrap-cloudflared URL so the platform records it correctly.
+   * provider is registered first; if that's us, we surface the
+   * bootstrap-cloudflared URL so the platform records it correctly.
    *
-   * Reads the env vars exported by tunnel-bootstrap, preferring the
-   * port-suffixed key (multi-agent-safe) over the unsuffixed one
-   * (backward compat with older agent versions).
+   * Multi-agent isolation: read AGENT_TUNNEL_URL_<agentId> where agentId
+   * is this process's VIBECONTROLS_AGENT_ID (same handle that scopes
+   * on-disk state). Two agents in the same process tree never see each
+   * other's URL because each id has its own env key. Bootstrap writes
+   * the same key.
+   *
+   * The unsuffixed `AGENT_TUNNEL_URL` is honoured ONLY when an
+   * operator pins it explicitly (external-tunnel mode); we never
+   * fall back to it from the bootstrap path because that would let
+   * stale env from one agent leak into another.
    */
   async getActiveTunnelUrl(): Promise<string | null> {
-    // External tunnel mode — agent operator pinned the URL.
+    // Per-agent-id key set by tunnel-bootstrap.
+    const agentId = process.env.VIBECONTROLS_AGENT_ID || "default";
+    const idSuffix = agentId.replace(/[^A-Za-z0-9_]/g, "_");
+    const suffixed = process.env[`AGENT_TUNNEL_URL_${idSuffix}`];
+    if (suffixed) return suffixed;
+    // External-tunnel mode: operator pinned `AGENT_TUNNEL_URL=...`
+    // before launching `vibe start`. The unsuffixed key is the
+    // operator's intent — agent processes inheriting this from the
+    // shell are explicitly opting into "external mode" together.
     const externalUrl = process.env.AGENT_TUNNEL_URL;
-    // Best-effort port resolution: the host base URL is set by the agent
-    // and accessible via the same HostServices it gave us at construction.
-    // We don't store it on the provider to keep the constructor signature
-    // unchanged; instead the unsuffixed env is the safe fallback.
     if (externalUrl) return externalUrl;
-    // No bootstrap URL available; vibetunnels doesn't manage the agent's
-    // primary HTTP tunnel itself, so return null and let the caller fall
-    // back to other discovery (e.g. agent record on the backend).
+    // No bootstrap URL and no operator pin; vibetunnels doesn't manage
+    // the agent's primary HTTP tunnel itself, so return null and let
+    // the caller fall back to other discovery (e.g. agent record on
+    // the backend).
     return null;
   }
 
