@@ -35,7 +35,7 @@ tunnel provider.
    `/api/tunnels/issue-session`, which routes through the tunnel
    manager plugin to this provider.
 3. The provider writes an `frpc.toml` config into
-   `~/.boff/vibecontrols/agents/{agentId}/plugins/tunnel-vibetunnels/{tunnelId}.toml`
+   `~/.boff/vibecontrols/agents/{profile}/plugins/tunnel-vibetunnels/{tunnelId}.toml`
    and persists a TunnelInfo record in encrypted agent storage.
 4. `start(tunnelId)` spawns `frpc -c <configPath>` and scrapes the
    subprocess output for `start proxy success` to transition the
