@@ -156,11 +156,11 @@ export class VibeTunnelsProvider implements TunnelProvider {
    * provider is registered first; if that's us, we surface the
    * bootstrap-cloudflared URL so the platform records it correctly.
    *
-   * Multi-agent isolation: read AGENT_TUNNEL_URL_<agentId> where agentId
-   * is this process's VIBECONTROLS_AGENT_ID (same handle that scopes
+   * Multi-agent isolation: read AGENT_TUNNEL_URL_<profile> where profile
+   * is this process's VIBECONTROLS_PROFILE (same handle that scopes
    * on-disk state). Two agents in the same process tree never see each
-   * other's URL because each id has its own env key. Bootstrap writes
-   * the same key.
+   * other's URL because each profile has its own env key. Bootstrap
+   * writes the same key.
    *
    * The unsuffixed `AGENT_TUNNEL_URL` is honoured ONLY when an
    * operator pins it explicitly (external-tunnel mode); we never
@@ -168,10 +168,10 @@ export class VibeTunnelsProvider implements TunnelProvider {
    * stale env from one agent leak into another.
    */
   async getActiveTunnelUrl(): Promise<string | null> {
-    // Per-agent-id key set by tunnel-bootstrap.
-    const agentId = process.env.VIBECONTROLS_AGENT_ID || "default";
-    const idSuffix = agentId.replace(/[^A-Za-z0-9_]/g, "_");
-    const suffixed = process.env[`AGENT_TUNNEL_URL_${idSuffix}`];
+    // Per-profile key set by tunnel-bootstrap.
+    const profile = process.env.VIBECONTROLS_PROFILE ?? "default";
+    const profileSuffix = profile.replace(/[^A-Za-z0-9_]/g, "_");
+    const suffixed = process.env[`AGENT_TUNNEL_URL_${profileSuffix}`];
     if (suffixed) return suffixed;
     // External-tunnel mode: operator pinned `AGENT_TUNNEL_URL=...`
     // before launching `vibe start`. The unsuffixed key is the
