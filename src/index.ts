@@ -23,7 +23,9 @@ export const vibePlugin: VibePlugin = {
   providers: {},
 
   async onServerStart(_app: unknown, hostServices: HostServices) {
-    hostServices?.telemetry?.emit("tunnel.provider.ready", { provider: "vibetunnels" });
+    hostServices?.telemetry?.emit("tunnel.provider.ready", {
+      provider: "vibetunnels",
+    });
     provider = new VibeTunnelsProvider(hostServices);
     vibePlugin.providers!.tunnel = provider;
 

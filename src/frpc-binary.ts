@@ -20,17 +20,11 @@ export class FrpcNotFoundError extends Error {
 }
 
 async function which(binary: string): Promise<string | null> {
-  try {
-    const proc = Bun.spawn(["which", binary], {
-      stdout: "pipe",
-      stderr: "ignore",
-    });
-    const out = await new Response(proc.stdout).text();
-    const path = out.trim();
-    if (path && existsSync(path)) return path;
-  } catch {
-    // fallthrough
-  }
+  // Bun.which works on every supported platform (POSIX + Windows) and
+  // already understands PATHEXT (.exe/.cmd) on Windows. Replaces the old
+  // POSIX-only `which` subprocess.
+  const found = Bun.which(binary);
+  if (found && existsSync(found)) return found;
   return null;
 }
 
