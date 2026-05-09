@@ -2,11 +2,17 @@
  * VibeTunnelsProvider — implements the TunnelProvider interface against
  * a shared `frps` server. Spawns `frpc` subprocesses locally.
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+
+import {
+  BoundLogger,
+  gracefulKill as sdkGracefulKill,
+  isProcessAlive as sdkIsProcessAlive,
+} from "@vibecontrols/plugin-sdk";
+import type { HostServices } from "@vibecontrols/plugin-sdk/contract";
 
 import { buildFrpcConfig, extractFrpsHint } from "./frpc-config.js";
 import { resolveFrpcBinary, verifyFrpc } from "./frpc-binary.js";
@@ -17,47 +23,22 @@ import {
   PROVIDER_NAME,
   START_TIMEOUT_MS,
   STORAGE_NS,
-  type HostServices,
+  type AgentStorageProvider,
   type IssueSessionRequest,
-  type Logger,
-  type StorageProvider,
   type TunnelInfo,
   type TunnelProvider,
   type TunnelProviderCapabilities,
   type TunnelSessionInfo,
 } from "./types.js";
 
-const LOG = "tunnel-vibetunnels";
-
 function isProcessAlive(pid: number | undefined): boolean {
   if (!pid) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
+  return sdkIsProcessAlive(pid);
 }
 
 async function gracefulKill(pid: number | undefined): Promise<void> {
-  if (!pid || !isProcessAlive(pid)) return;
-  try {
-    process.kill(pid, "SIGTERM");
-  } catch {
-    return;
-  }
-  const deadline = Date.now() + KILL_GRACE_MS;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 200));
-    if (!isProcessAlive(pid)) return;
-  }
-  if (isProcessAlive(pid)) {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      // already gone
-    }
-  }
+  if (!pid) return;
+  await sdkGracefulKill(pid, KILL_GRACE_MS);
 }
 
 function configDir(): string {
@@ -136,12 +117,16 @@ export class VibeTunnelsProvider implements TunnelProvider {
   readonly name = PROVIDER_NAME;
 
   private readonly processes = new Map<string, Subprocess>();
-  private readonly storage: StorageProvider;
-  private readonly log: Logger;
+  private readonly storage: AgentStorageProvider;
+  private readonly log: BoundLogger;
 
   constructor(host: HostServices) {
-    this.storage = host.storage;
-    this.log = host.logger;
+    // The agent's runtime storage is structurally identical to
+    // AgentStorageProvider (string get/set, void delete) — narrow via a
+    // single cast at the boundary so we don't drag the agent's broader
+    // typed StorageProvider surface through the plugin.
+    this.storage = host.storage as unknown as AgentStorageProvider;
+    this.log = new BoundLogger(host.logger, PROVIDER_NAME);
   }
 
   /**
@@ -228,7 +213,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
     try {
       return JSON.parse(raw) as TunnelInfo[];
     } catch {
-      this.log.warn(LOG, "Corrupt tunnel list — resetting");
+      this.log.warn("Corrupt tunnel list — resetting");
       return [];
     }
   }
@@ -376,7 +361,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
     }
     const frpcPath = await resolveFrpcBinary();
 
-    this.log.info(LOG, `Spawning frpc for tunnel ${tunnelId}`);
+    this.log.info(`Spawning frpc for tunnel ${tunnelId}`);
     const proc = Bun.spawn([frpcPath, "-c", configPath], {
       stdin: "ignore",
       stdout: "pipe",
@@ -402,10 +387,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
     void proc.exited.then(async (code) => {
       if (!this.processes.has(tunnelId)) return;
       this.processes.delete(tunnelId);
-      this.log.warn(
-        LOG,
-        `frpc for ${tunnelId} exited unexpectedly (code=${code})`,
-      );
+      this.log.warn(`frpc for ${tunnelId} exited unexpectedly (code=${code})`);
       const current = await this.loadTunnels();
       const idx = current.findIndex((t) => t.id === tunnelId);
       if (idx >= 0) {
@@ -496,10 +478,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
     };
     await this.saveTunnels(tunnels);
     // frp OSS cannot reload config — caller must rotate() to apply.
-    this.log.warn(
-      LOG,
-      `Attached ${domain} to ${tunnelId}; rotate tunnel to apply.`,
-    );
+    this.log.warn(`Attached ${domain} to ${tunnelId}; rotate tunnel to apply.`);
   }
 
   async detachCustomDomain(tunnelId: string, domain: string): Promise<void> {
@@ -535,14 +514,14 @@ export class VibeTunnelsProvider implements TunnelProvider {
     }
     if (touched > 0) {
       await this.saveTunnels(tunnels);
-      this.log.info(LOG, `Marked ${touched} orphaned tunnel(s) as stopped`);
+      this.log.info(`Marked ${touched} orphaned tunnel(s) as stopped`);
     }
   }
 
   async stopAll(): Promise<void> {
     for (const [id, proc] of this.processes) {
       await gracefulKill(proc.pid);
-      this.log.info(LOG, `Stopped tunnel ${id} on shutdown`);
+      this.log.info(`Stopped tunnel ${id} on shutdown`);
     }
     this.processes.clear();
   }

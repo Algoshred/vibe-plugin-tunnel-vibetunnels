@@ -1,6 +1,11 @@
 /**
- * Locally-redeclared types. Mirrors the canonical TunnelProvider contract
- * from @vibecontrols/agent.
+ * Tunnel-domain types for the vibetunnels (frp) provider plugin. The
+ * plugin contract types (VibePlugin / HostServices / PluginCapabilities)
+ * come from `@vibecontrols/plugin-sdk` — do NOT redeclare them here.
+ *
+ * The shapes below mirror the canonical TunnelProvider contract from
+ * `@vibecontrols/agent` so the plugin remains free of a hard dependency
+ * on the agent package while still type-checking the dispatch surface.
  */
 
 export type TunnelStatus =
@@ -96,61 +101,16 @@ export interface TunnelProvider {
   getActiveTunnelUrl?(): Promise<string | null>;
 }
 
-export interface StorageProvider {
+/**
+ * Agent's runtime storage surface — string-typed get/set + void delete +
+ * list. Structurally compatible with the SDK's neutral StorageProvider
+ * but with the concrete shapes the agent emits at runtime.
+ */
+export interface AgentStorageProvider {
   get(namespace: string, key: string): Promise<string | null>;
   set(namespace: string, key: string, value: string): Promise<void>;
   delete(namespace: string, key: string): Promise<void>;
   list(namespace: string): Promise<string[]>;
-  deleteAll(namespace: string): Promise<void>;
-}
-
-export interface Logger {
-  debug(source: string, msg: string, meta?: Record<string, unknown>): void;
-  info(source: string, msg: string, meta?: Record<string, unknown>): void;
-  warn(source: string, msg: string, meta?: Record<string, unknown>): void;
-  error(source: string, msg: string, meta?: Record<string, unknown>): void;
-}
-
-export interface ServiceRegistryLike {
-  registerProvider?(type: string, provider: unknown, pluginName: string): void;
-}
-
-export interface HostServices {
-  telemetry?: {
-    emit: (name: string, payload?: Record<string, unknown>) => void;
-  };
-  storage: StorageProvider;
-  logger: Logger;
-  serviceRegistry: ServiceRegistryLike;
-}
-
-export interface PluginCapabilities {
-  storage?: "none" | "read" | "rw";
-  secrets?: "none" | "read" | "rw";
-  gateway?: boolean;
-  broadcast?: boolean;
-  subprocess?: boolean;
-  audit?: boolean;
-  telemetry?: boolean;
-}
-
-export interface VibePlugin {
-  capabilities?: PluginCapabilities;
-  name: string;
-  version: string;
-  description?: string;
-  tags?: Array<
-    "backend" | "frontend" | "cli" | "provider" | "adapter" | "integration"
-  >;
-  providers?: { tunnel?: TunnelProvider };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  onServerStart?: (
-    app: any,
-    hostServices: HostServices,
-  ) => void | Promise<void>;
-  onServerStop?: (ctx?: {
-    reason: "reload" | "shutdown";
-  }) => void | Promise<void>;
 }
 
 export const PROVIDER_NAME = "tunnel-vibetunnels";

@@ -1,6 +1,6 @@
 {
   "name": "@vibecontrols/vibe-plugin-tunnel-vibetunnels",
-  "version": "2026.509.1",
+  "version": "2026.509.2",
   "type": "module",
   "main": "./dist/index.js",
   "description": "VibeTunnels frp-based tunnel provider for VibeControls Agent",
@@ -25,7 +25,9 @@
     "prepublishOnly": "bun run build",
     "sanity": "bun run format:check && bun run lint && bun run type:check && bun run build"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@vibecontrols/plugin-sdk": "2026.509.1"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.0.0",
