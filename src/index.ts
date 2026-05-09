@@ -16,13 +16,15 @@ import {
 } from "@vibecontrols/plugin-sdk";
 import type {
   HostServices,
+  ProfileContext,
   VibePlugin,
+  VibePluginFactory,
 } from "@vibecontrols/plugin-sdk/contract";
 
 import { VibeTunnelsProvider } from "./provider.js";
 import { PROVIDER_NAME, type TunnelProvider } from "./types.js";
 
-const PLUGIN_VERSION = "2026.509.2";
+const PLUGIN_VERSION = "2026.509.3";
 
 /**
  * Local extension of the SDK contract — `providers` slot is an
@@ -33,62 +35,83 @@ type VibeTunnelsVibePlugin = VibePlugin & {
   providers?: { tunnel?: TunnelProvider };
 };
 
+/**
+ * Module-level provider singleton — frpc subprocesses are global OS
+ * resources and we must not spawn duplicate tunnels per profile. The
+ * factory binds the provider once and reuses it across createPlugin
+ * calls.
+ */
 let provider: VibeTunnelsProvider | null = null;
 
-const telemetry = new TelemetryEmitter(PROVIDER_NAME, PLUGIN_VERSION);
+/**
+ * Plugin contract V2 factory. Builds a fresh VibePlugin (with its own
+ * lifecycle/telemetry instances and providers bag) per call. The
+ * `provider` module-level binding is reused across calls because frpc
+ * subprocesses are global OS resources — having two profile-instances
+ * spawn duplicate tunnels would be unsafe.
+ */
+export const createPlugin: VibePluginFactory = (
+  _ctx: ProfileContext,
+): VibePlugin => {
+  const telemetry = new TelemetryEmitter(PROVIDER_NAME, PLUGIN_VERSION);
 
-const lifecycle = createLifecycleHooks({
-  name: PROVIDER_NAME,
-  telemetryEventName: "tunnel.provider.ready",
-  onInit: async (hostServices: HostServices) => {
-    const log = new BoundLogger(hostServices.logger, PROVIDER_NAME);
+  const plugin: VibeTunnelsVibePlugin = {
+    capabilities: {
+      storage: "rw",
+      subprocess: true,
+      telemetry: true,
+    },
+    name: PROVIDER_NAME,
+    version: PLUGIN_VERSION,
+    description: "VibeTunnels frp-based tunnel provider",
+    tags: ["backend", "provider"],
+    providers: {},
 
-    provider = new VibeTunnelsProvider(hostServices);
-    vibePlugin.providers = { tunnel: provider };
+    onServerStart: undefined,
+    onServerStop: undefined,
+  };
 
-    telemetry.emit("tunnel.provider.ready", { provider: "vibetunnels" });
+  const lifecycle = createLifecycleHooks({
+    name: PROVIDER_NAME,
+    telemetryEventName: "tunnel.provider.ready",
+    onInit: async (hostServices: HostServices) => {
+      const log = new BoundLogger(hostServices.logger, PROVIDER_NAME);
 
-    // Health-check (don't fail startup — surface via getCapabilities).
-    const health = await provider.healthCheck();
-    if (!health.ok) {
-      log.warn(`frpc not available: ${health.message ?? "unknown"}`);
-    } else {
-      log.info(`frpc ready: ${JSON.stringify(health.details ?? {})}`);
-    }
+      provider = new VibeTunnelsProvider(hostServices);
+      plugin.providers = { tunnel: provider };
 
-    await provider.resumeOrphanedTunnels();
+      telemetry.emit("tunnel.provider.ready", { provider: "vibetunnels" });
 
-    // Auto-register with the host's service registry. The agent's
-    // runtime registry exposes `registerProvider(type, provider, name)`,
-    // a richer surface than the SDK's neutral `registerService(type,
-    // name, instance)`. The SDK's ProviderRegistry façade calls
-    // `registerService` underneath which the agent forwards through.
-    const providers = new ProviderRegistry(hostServices);
-    providers.registerProvider("tunnel", PROVIDER_NAME, provider);
-  },
-  onShutdown: async () => {
-    if (!provider) return;
-    await provider.stopAll();
-    provider = null;
-  },
-});
+      // Health-check (don't fail startup — surface via getCapabilities).
+      const health = await provider.healthCheck();
+      if (!health.ok) {
+        log.warn(`frpc not available: ${health.message ?? "unknown"}`);
+      } else {
+        log.info(`frpc ready: ${JSON.stringify(health.details ?? {})}`);
+      }
 
-export const vibePlugin: VibeTunnelsVibePlugin = {
-  capabilities: {
-    storage: "rw",
-    subprocess: true,
-    telemetry: true,
-  },
-  name: PROVIDER_NAME,
-  version: PLUGIN_VERSION,
-  description: "VibeTunnels frp-based tunnel provider",
-  tags: ["backend", "provider"],
-  providers: {},
+      await provider.resumeOrphanedTunnels();
 
-  onServerStart: lifecycle.onServerStart,
-  onServerStop: lifecycle.onServerStop,
+      // Auto-register with the host's service registry. The agent's
+      // runtime registry exposes `registerProvider(type, provider, name)`,
+      // a richer surface than the SDK's neutral `registerService(type,
+      // name, instance)`. The SDK's ProviderRegistry façade calls
+      // `registerService` underneath which the agent forwards through.
+      const providers = new ProviderRegistry(hostServices);
+      providers.registerProvider("tunnel", PROVIDER_NAME, provider);
+    },
+    onShutdown: async () => {
+      if (!provider) return;
+      await provider.stopAll();
+      provider = null;
+    },
+  });
+
+  plugin.onServerStart = lifecycle.onServerStart;
+  plugin.onServerStop = lifecycle.onServerStop;
+
+  return plugin;
 };
 
-export default vibePlugin;
 export { VibeTunnelsProvider } from "./provider.js";
 export * from "./types.js";
