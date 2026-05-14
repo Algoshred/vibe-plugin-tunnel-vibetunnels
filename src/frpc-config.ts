@@ -30,6 +30,16 @@ export interface FrpcConfigInput {
    */
   subdomain?: string;
   customDomains?: string[];
+  /**
+   * tcpmux multiplexer mode. When set on a tcp-protocol tunnel, frpc
+   * registers a `type = "tcpmux"` proxy with `multiplexer = "httpconnect"`
+   * and the routing key is `customDomains[0]`. Clients reach the
+   * tunnel by dialling the shard's tcpmux endpoint over TLS and
+   * sending an HTTP CONNECT for that routing key. Required for raw
+   * TCP support on the ACA topology (Azure LB only routes ports
+   * 80/443, so we can't pre-allocate per-tunnel external TCP ports).
+   */
+  tcpmuxRoutingKey?: string;
 }
 
 // Reject anything that could break out of a TOML double-quoted string.
@@ -115,11 +125,28 @@ export function buildFrpcConfig(input: FrpcConfigInput): string {
 
   lines.push("[[proxies]]");
   lines.push(`name = "${input.proxyName}"`);
-  lines.push(`type = "${input.protocol}"`);
+
+  // Raw TCP over the ACA topology rides frp's tcpmux/httpconnect mux
+  // instead of `type = "tcp"` — see the FrpcConfigInput.tcpmuxRoutingKey
+  // jsdoc for why.
+  const useTcpmux = input.protocol === "tcp" && input.tcpmuxRoutingKey;
+  if (useTcpmux) {
+    assertHostnameSafe("tcpmuxRoutingKey", input.tcpmuxRoutingKey as string);
+    lines.push(`type = "tcpmux"`);
+    lines.push(`multiplexer = "httpconnect"`);
+    lines.push(
+      `customDomains = ["${input.tcpmuxRoutingKey as string}"]`,
+    );
+  } else {
+    lines.push(`type = "${input.protocol}"`);
+  }
   lines.push(`localIP = "${input.localHost}"`);
   lines.push(`localPort = ${input.localPort}`);
 
-  if (input.protocol === "http" || input.protocol === "https") {
+  if (
+    !useTcpmux &&
+    (input.protocol === "http" || input.protocol === "https")
+  ) {
     // When the backend pre-computed a `subdomain` prefix, emit it as the
     // frpc `subdomain` field — frps then resolves the public URL via its
     // own `subDomainHost` config (`<subdomain>.<subDomainHost>`). The
@@ -159,6 +186,7 @@ export function extractFrpsHint(req: IssueSessionRequest): {
   token: string;
   proxyName: string;
   tlsEnable?: boolean;
+  tcpmuxRoutingKey?: string;
   managedHostname?: string;
   subdomain?: string;
   customDomains?: string[];
@@ -192,6 +220,10 @@ export function extractFrpsHint(req: IssueSessionRequest): {
     tlsEnable:
       typeof payload["tlsEnable"] === "boolean"
         ? (payload["tlsEnable"] as boolean)
+        : undefined,
+    tcpmuxRoutingKey:
+      typeof payload["tcpmuxRoutingKey"] === "string"
+        ? (payload["tcpmuxRoutingKey"] as string)
         : undefined,
     managedHostname:
       typeof payload["managedHostname"] === "string"
