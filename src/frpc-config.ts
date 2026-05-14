@@ -11,6 +11,13 @@ export interface FrpcConfigInput {
   protocol: "http" | "https" | "tcp" | "udp";
   localHost: string;
   localPort: number;
+  /**
+   * Wrap the frp control plane in TLS. Required when frps is configured
+   * with `transport.tls.force = true` — the ACA + nginx SNI-stream
+   * topology where frpc dials port 443 and the whole control connection
+   * is TLS end-to-end. Defaults to false for legacy plain-TCP shards.
+   */
+  tlsEnable?: boolean;
   managedHostname?: string;
   /**
    * Pre-computed subdomain prefix (e.g. `testing` for
@@ -94,6 +101,11 @@ export function buildFrpcConfig(input: FrpcConfigInput): string {
   lines.push(`method = "token"`);
   lines.push(`token = "${input.token}"`);
   lines.push("");
+  if (input.tlsEnable) {
+    lines.push("[transport.tls]");
+    lines.push("enable = true");
+    lines.push("");
+  }
   // frpc (>= 0.64) rejects the inline `log.to` / `log.level` syntax with
   // `json: unknown field "log"`; the correct TOML is a [log] table.
   lines.push("[log]");
@@ -146,6 +158,7 @@ export function extractFrpsHint(req: IssueSessionRequest): {
   serverPort: number;
   token: string;
   proxyName: string;
+  tlsEnable?: boolean;
   managedHostname?: string;
   subdomain?: string;
   customDomains?: string[];
@@ -176,6 +189,10 @@ export function extractFrpsHint(req: IssueSessionRequest): {
     serverPort,
     token,
     proxyName,
+    tlsEnable:
+      typeof payload["tlsEnable"] === "boolean"
+        ? (payload["tlsEnable"] as boolean)
+        : undefined,
     managedHostname:
       typeof payload["managedHostname"] === "string"
         ? (payload["managedHostname"] as string)

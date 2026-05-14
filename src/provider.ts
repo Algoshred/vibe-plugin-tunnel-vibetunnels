@@ -289,6 +289,7 @@ export class VibeTunnelsProvider implements TunnelProvider {
       protocol: req.protocol,
       localHost,
       localPort: req.localPort,
+      tlsEnable: hint.tlsEnable,
       managedHostname: hint.managedHostname,
       // When the backend pre-computed a `subdomain` prefix (because the
       // managed hostname is under the shard's frps subDomainHost), the
