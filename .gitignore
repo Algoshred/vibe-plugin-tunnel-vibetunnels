@@ -17,3 +17,9 @@ temp/
 
 .build-sha
 **/.build-sha
+.env.alpha
+.env.bak
+.env.beta
+.env.prod
+.playwright-cli/
+.boff/
