@@ -2,15 +2,19 @@
  * Resolve the path to an frpc binary.
  *
  * Resolution order:
- *   1. VIBETUNNELS_FRPC_PATH env var (if the file exists and is executable)
- *   2. `frpc` on $PATH
+ *   1. VIBETUNNELS_FRPC_PATH env var (if the file exists)
+ *   2. The provider-managed binary cache (absolute path, immune to the PATH
+ *      snapshot `Bun.which` takes at process start — the reason a freshly
+ *      installed frpc was invisible to the running daemon on Windows) then the
+ *      current PATH, via the SDK `resolveBinary` helper.
  *
- * Auto-download is documented in the README but intentionally not implemented
- * here — shipping an auto-downloader with checksum pinning is a separate
- * concern that merits its own review. Operators should install frpc via
- * their package manager or supply VIBETUNNELS_FRPC_PATH.
+ * Auto-download is wired through the plugin's `/prereqs/install` route which
+ * calls the SDK `installBinary` helper. This module never downloads — it only
+ * resolves what is already on disk so it is safe to call on every spawn.
  */
 import { existsSync } from "node:fs";
+
+import { resolveBinary } from "@vibecontrols/plugin-sdk/install";
 
 export class FrpcNotFoundError extends Error {
   constructor(message: string) {
@@ -19,24 +23,15 @@ export class FrpcNotFoundError extends Error {
   }
 }
 
-async function which(binary: string): Promise<string | null> {
-  // Bun.which works on every supported platform (POSIX + Windows) and
-  // already understands PATHEXT (.exe/.cmd) on Windows. Replaces the old
-  // POSIX-only `which` subprocess.
-  const found = Bun.which(binary);
-  if (found && existsSync(found)) return found;
-  return null;
-}
-
 export async function resolveFrpcBinary(): Promise<string> {
   const envPath = process.env["VIBETUNNELS_FRPC_PATH"];
   if (envPath && existsSync(envPath)) return envPath;
 
-  const which_ = await which("frpc");
-  if (which_) return which_;
+  const resolved = resolveBinary("frpc");
+  if (resolved) return resolved;
 
   throw new FrpcNotFoundError(
-    "frpc binary not found. Install frpc or set VIBETUNNELS_FRPC_PATH.",
+    "frpc binary not found. Run the plugin's /prereqs/install to auto-download it, install frpc manually, or set VIBETUNNELS_FRPC_PATH.",
   );
 }
 

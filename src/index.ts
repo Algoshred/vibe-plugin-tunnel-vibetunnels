@@ -8,6 +8,8 @@
  * Migrated to consume `@vibecontrols/plugin-sdk` for the contract,
  * lifecycle, telemetry, logger and provider-registry helpers.
  */
+import { Elysia } from "elysia";
+
 import {
   BoundLogger,
   createLifecycleHooks,
@@ -20,6 +22,12 @@ import type {
   VibePlugin,
   VibePluginFactory,
 } from "@vibecontrols/plugin-sdk/contract";
+import {
+  installBinary,
+  resolveBinary,
+  type BinaryDownload,
+  type ToolPlatform,
+} from "@vibecontrols/plugin-sdk/install";
 
 import { VibeTunnelsProvider } from "./provider.js";
 import { PROVIDER_NAME, type TunnelProvider } from "./types.js";
@@ -27,11 +35,124 @@ import { PROVIDER_NAME, type TunnelProvider } from "./types.js";
 const PLUGIN_VERSION = "2026.509.3";
 
 /**
+ * frp (fatedier/frp) release assets per platform. The provider downloads the
+ * correct archive to the agent's binary cache (~/.boff/vibecontrols/tools) via
+ * the SDK installer and extracts `frpc` from the versioned subdir within — so
+ * frpc is owned + installed by THIS plugin and the thin agent never installs
+ * it. frp's release assets do NOT publish a "latest" alias, so the version is
+ * pinned. Once cached the binary is reused.
+ */
+const FRP_VER = "0.69.0";
+const FRPC_DOWNLOADS: Partial<Record<ToolPlatform, BinaryDownload>> = {
+  "linux-x64": {
+    url: `https://github.com/fatedier/frp/releases/download/v${FRP_VER}/frp_${FRP_VER}_linux_amd64.tar.gz`,
+    archive: "tar.gz",
+    binaryWithinArchive: `frp_${FRP_VER}_linux_amd64/frpc`,
+  },
+  "linux-arm64": {
+    url: `https://github.com/fatedier/frp/releases/download/v${FRP_VER}/frp_${FRP_VER}_linux_arm64.tar.gz`,
+    archive: "tar.gz",
+    binaryWithinArchive: `frp_${FRP_VER}_linux_arm64/frpc`,
+  },
+  "darwin-x64": {
+    url: `https://github.com/fatedier/frp/releases/download/v${FRP_VER}/frp_${FRP_VER}_darwin_amd64.tar.gz`,
+    archive: "tar.gz",
+    binaryWithinArchive: `frp_${FRP_VER}_darwin_amd64/frpc`,
+  },
+  "darwin-arm64": {
+    url: `https://github.com/fatedier/frp/releases/download/v${FRP_VER}/frp_${FRP_VER}_darwin_arm64.tar.gz`,
+    archive: "tar.gz",
+    binaryWithinArchive: `frp_${FRP_VER}_darwin_arm64/frpc`,
+  },
+  "win32-x64": {
+    url: `https://github.com/fatedier/frp/releases/download/v${FRP_VER}/frp_${FRP_VER}_windows_amd64.zip`,
+    archive: "zip",
+    binaryWithinArchive: `frp_${FRP_VER}_windows_amd64/frpc.exe`,
+  },
+};
+
+/**
+ * /prereqs routes — let the agent's first-run prerequisite flow report on and
+ * auto-download frpc. `/status` reports presence via `resolveBinary` (cache or
+ * PATH, absolute); `/install` downloads frpc into the agent binary cache via
+ * `installBinary` when absent, with a manual pendingSudo fallback on failure.
+ */
+function createPrereqsRoutes() {
+  return new Elysia({ prefix: "/prereqs" })
+    .get("/status", () => {
+      const frpc = resolveBinary("frpc");
+      return {
+        satisfied: !!frpc,
+        missing: frpc
+          ? []
+          : [
+              {
+                name: "frpc",
+                kind: "binary" as const,
+                requiresSudo: false,
+                detected: undefined,
+              },
+            ],
+      };
+    })
+    .post("/install", async () => {
+      // Already resolvable (cache or PATH)? Nothing to do.
+      if (resolveBinary("frpc")) {
+        return { ok: true, installed: [], pendingSudo: [], errors: [] };
+      }
+      // Auto-download frpc into the agent binary cache. No sudo: the cache
+      // lives under the user's home dir.
+      try {
+        await installBinary({
+          name: "frpc",
+          downloads: FRPC_DOWNLOADS,
+          versionMatcher: "frpc version|frp version",
+        });
+        return {
+          ok: true,
+          installed: ["frpc"],
+          pendingSudo: [],
+          errors: [],
+        };
+      } catch (err) {
+        // Auto-download failed (offline, unsupported arch) — fall back to a
+        // manual instruction so the operator can still recover.
+        const message = err instanceof Error ? err.message : String(err);
+        const manual =
+          process.platform === "darwin"
+            ? "brew install frp"
+            : process.platform === "win32"
+              ? "scoop install frpc    # or download from https://github.com/fatedier/frp/releases"
+              : "download frp from https://github.com/fatedier/frp/releases and place frpc on your PATH (or set VIBETUNNELS_FRPC_PATH)";
+        return {
+          ok: false,
+          installed: [],
+          pendingSudo: [
+            {
+              name: "frpc",
+              command: manual,
+              reason: `frpc auto-download failed: ${message}`,
+            },
+          ],
+          errors: [message],
+        };
+      }
+    })
+    .post("/uninstall", () => ({ ok: true }));
+}
+
+/**
  * Local extension of the SDK contract — `providers` slot is an
  * agent-host extension surfaced to the runtime registry. The SDK
  * contract leaves it to the host implementation.
  */
 type VibeTunnelsVibePlugin = VibePlugin & {
+  prerequisites?: Array<{
+    name: string;
+    kind: "binary" | "npm" | "pip" | "cargo" | "manual";
+    requiresSudo: boolean;
+    description?: string;
+  }>;
   providers?: { tunnel?: TunnelProvider };
 };
 
@@ -68,7 +189,20 @@ export const createPlugin: VibePluginFactory = (
     // The agent adds this to its tunnel-URL allow-list at registration, so the
     // thin agent never hardcodes a vibetunnels domain in its url-security layer.
     tunnelDomainSuffixes: [".vibetunnels.com"],
+
+    prerequisites: [
+      {
+        name: "frpc",
+        kind: "binary",
+        requiresSudo: false,
+        description:
+          "frp client (auto-downloaded to the agent binary cache); spawned to open tunnels",
+      },
+    ],
+
     providers: {},
+
+    createRoutes: () => createPrereqsRoutes(),
 
     onServerStart: undefined,
     onServerStop: undefined,
