@@ -65,6 +65,9 @@ export const createPlugin: VibePluginFactory = (
     version: PLUGIN_VERSION,
     description: "VibeTunnels frp-based tunnel provider",
     tags: ["backend", "provider"],
+    // The agent adds this to its tunnel-URL allow-list at registration, so the
+    // thin agent never hardcodes a vibetunnels domain in its url-security layer.
+    tunnelDomainSuffixes: [".vibetunnels.com"],
     providers: {},
 
     onServerStart: undefined,
