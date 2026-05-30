@@ -105,10 +105,27 @@ export const createPlugin: VibePluginFactory = (
       await provider.stopAll();
       provider = null;
     },
+    // `vibe nuke` runs this while the daemon is still up, so the provider
+    // singleton + its in-memory process map are reachable. Force-reap every
+    // frpc subprocess this provider spawned and wipe its storage namespace.
+    // Unlike onShutdown, nuke ALWAYS does the FULL teardown (it never just
+    // detaches/preserves) — `nukeAll` kills processes AND clears persisted
+    // tunnel/session state. The agent never names frpc; that knowledge
+    // lives here.
+    onNuke: async (_hostServices, ctx) => {
+      if (!provider) return { notes: ["tunnel provider not initialised"] };
+      if (ctx.dryRun) {
+        return { reaped: ["frpc tunnels + tunnel-vibetunnels storage"] };
+      }
+      await provider.nukeAll();
+      provider = null;
+      return { reaped: ["frpc tunnels + tunnel-vibetunnels storage"] };
+    },
   });
 
   plugin.onServerStart = lifecycle.onServerStart;
   plugin.onServerStop = lifecycle.onServerStop;
+  plugin.onNuke = lifecycle.onNuke;
 
   return plugin;
 };

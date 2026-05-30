@@ -5,7 +5,7 @@
     "": {
       "name": "@vibecontrols/vibe-plugin-tunnel-vibetunnels",
       "dependencies": {
-        "@vibecontrols/plugin-sdk": "2026.509.2",
+        "@vibecontrols/plugin-sdk": "2026.530.3",
       },
       "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -107,7 +107,7 @@
 
     "@typescript-eslint/visitor-keys": ["@typescript-eslint/visitor-keys@8.59.3", "", { "dependencies": { "@typescript-eslint/types": "8.59.3", "eslint-visitor-keys": "^5.0.0" } }, "sha512-f1UQF7ggd42YiwI5wGrRaPsa+P0CINBlrkLPmGfpq/u/I/oVtecoEIfFR9ag/oa1sLOsRNZ6xehf6qMZhQGBDg=="],
 
-    "@vibecontrols/plugin-sdk": ["@vibecontrols/plugin-sdk@2026.509.2", "", { "peerDependencies": { "commander": ">=14.0.0", "elysia": ">=1.3.0" }, "optionalPeers": ["commander", "elysia"] }, "sha512-fF9gRCnfwZVJr0tAsuBn2NRdsZfmZ1WdkiYNmw8yG+mfpFtneYpfCHZdEGQqVQvOO0hXUVv545ugpJ4hKirTwQ=="],
+    "@vibecontrols/plugin-sdk": ["@vibecontrols/plugin-sdk@2026.530.3", "", { "peerDependencies": { "commander": ">=14.0.0", "elysia": ">=1.3.0" }, "optionalPeers": ["commander", "elysia"] }, "sha512-w9KvZv2LR8LbWvXsyaGg2L5o6LzS/IpNSAlW4XMKvw1ldBut77L6GCBBesBRnfSZK3/KlCuGAaGD+Gy0jyEJEQ=="],
 
     "@vibecontrols/vibe-plugin-tunnel": ["@vibecontrols/vibe-plugin-tunnel@2026.512.1", "", { "dependencies": { "@vibecontrols/plugin-sdk": "2026.509.2", "elysia": "^1.4.2" }, "peerDependencies": { "@vibecontrols/agent": ">=2.0.0" }, "optionalPeers": ["@vibecontrols/agent"] }, "sha512-mPfmH/tY6CbQsa8YKgEtFQJfaRVwtymAeCep784ksVrqTncgfBR5eYD9eh+qjZDC03Q64lKwDH5wlBy8Gq+nyA=="],
 
@@ -308,6 +308,8 @@
     "@typescript-eslint/eslint-plugin/ignore": ["ignore@7.0.5", "", {}, "sha512-Hs59xBNfUIunMFgWAbGX5cq6893IbWg4KnrjbYwX3tx0ztorVgTDA6B2sxf8ejHJ4wz8BqGUMYlnzNBer5NvGg=="],
 
     "@typescript-eslint/visitor-keys/eslint-visitor-keys": ["eslint-visitor-keys@5.0.1", "", {}, "sha512-tD40eHxA35h0PEIZNeIjkHoDR4YjjJp34biM0mDvplBe//mB+IHCqHDGV7pxF+7MklTvighcCPPZC7ynWyjdTA=="],
+
+    "@vibecontrols/vibe-plugin-tunnel/@vibecontrols/plugin-sdk": ["@vibecontrols/plugin-sdk@2026.509.2", "", { "peerDependencies": { "commander": ">=14.0.0", "elysia": ">=1.3.0" }, "optionalPeers": ["commander", "elysia"] }, "sha512-fF9gRCnfwZVJr0tAsuBn2NRdsZfmZ1WdkiYNmw8yG+mfpFtneYpfCHZdEGQqVQvOO0hXUVv545ugpJ4hKirTwQ=="],
 
     "eslint/@eslint/js": ["@eslint/js@9.39.4", "", {}, "sha512-nE7DEIchvtiFTwBw4Lfbu59PG+kCofhjsKaCWzxTpt4lfRjRMqG6uMBzKXuEcyXhOHoUp9riAm7/aWYGhXZ9cw=="],
   }

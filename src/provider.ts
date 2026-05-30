@@ -528,6 +528,29 @@ export class VibeTunnelsProvider implements TunnelProvider {
     this.processes.clear();
   }
 
+  /**
+   * Full nuke teardown: force-reap every frpc subprocess this provider
+   * spawned AND wipe its persisted storage namespace. Unlike `stopAll`
+   * (which only kills processes — leaving the tunnel/session records on
+   * disk for the next start) and unlike `detachAll` (which preserves the
+   * subprocesses for hot reload), `nukeAll` leaves NOTHING behind. The
+   * agent calls this via the plugin's `onNuke` hook while the daemon is
+   * still up, so `this.processes` is fully populated.
+   */
+  async nukeAll(): Promise<void> {
+    // Reuse the shutdown teardown to kill every tracked frpc subprocess.
+    await this.stopAll();
+
+    // Wipe every key under this provider's storage namespace (the tunnel
+    // list + per-tunnel session records). The agent storage surface has
+    // no namespace-wide delete, so enumerate then delete each key.
+    const keys = await this.storage.list(STORAGE_NS);
+    for (const key of keys) {
+      await this.storage.delete(STORAGE_NS, key);
+    }
+    this.log.info(`Nuked ${keys.length} storage key(s) under "${STORAGE_NS}"`);
+  }
+
   detachAll(): void {
     // Hot-reload: leave subprocesses running, just clear in-memory refs.
     this.processes.clear();
