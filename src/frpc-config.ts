@@ -134,19 +134,14 @@ export function buildFrpcConfig(input: FrpcConfigInput): string {
     assertHostnameSafe("tcpmuxRoutingKey", input.tcpmuxRoutingKey as string);
     lines.push(`type = "tcpmux"`);
     lines.push(`multiplexer = "httpconnect"`);
-    lines.push(
-      `customDomains = ["${input.tcpmuxRoutingKey as string}"]`,
-    );
+    lines.push(`customDomains = ["${input.tcpmuxRoutingKey as string}"]`);
   } else {
     lines.push(`type = "${input.protocol}"`);
   }
   lines.push(`localIP = "${input.localHost}"`);
   lines.push(`localPort = ${input.localPort}`);
 
-  if (
-    !useTcpmux &&
-    (input.protocol === "http" || input.protocol === "https")
-  ) {
+  if (!useTcpmux && (input.protocol === "http" || input.protocol === "https")) {
     // When the backend pre-computed a `subdomain` prefix, emit it as the
     // frpc `subdomain` field — frps then resolves the public URL via its
     // own `subDomainHost` config (`<subdomain>.<subDomainHost>`). The
