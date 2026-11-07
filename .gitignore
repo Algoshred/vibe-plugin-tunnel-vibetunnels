@@ -23,3 +23,5 @@ temp/
 .env.prod
 .playwright-cli/
 .boff/
+junit.xml
+.eslintcache
