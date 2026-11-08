@@ -58,10 +58,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/algoshred/vibe-plugin-tunnel-vibetunnels.git"
+    "url": "git+https://github.com/Algoshred/vibe-plugin-tunnel-vibetunnels.git"
   },
   "bugs": {
-    "url": "https://github.com/algoshred/vibe-plugin-tunnel-vibetunnels/issues"
+    "url": "https://github.com/Algoshred/vibe-plugin-tunnel-vibetunnels/issues"
   },
   "homepage": "https://vibetunnels.com",
   "publishConfig": {
