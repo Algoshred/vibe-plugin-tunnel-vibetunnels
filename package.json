@@ -28,7 +28,7 @@
     "audit": "bun audit --audit-level=high"
   },
   "dependencies": {
-    "@vibecontrols/plugin-sdk": "2026.530.5"
+    "@vibecontrols/plugin-sdk": "2026.601.1"
   },
   "devDependencies": {
     "@burdenoff/toolchain": "2026.1107.14",
